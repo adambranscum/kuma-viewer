@@ -97,11 +97,13 @@ app.get('/api/status', async (req, res) => {
             const beats = hbData.heartbeatList?.[monitorId] || [];
             const lastBeat = beats[beats.length - 1];
             const status = lastBeat ? lastBeat.status : null;
+            const recentBeats = beats.slice(-20).map(b => b.status);
 
             rows[matchedRow].push({
                 id: monitor.id,
                 name: monitor.name,
                 status,
+                recentBeats,
             });
         }
 

@@ -43,8 +43,16 @@
       'Cameras & Security'
     ];
 
-    const SLOTS_PER_COLUMN = 20;
+    const SLOTS_PER_COLUMN = 15;
     const FALLBACK_COLOR = '#4b5563'; // gray-600, used if a tag has no color set in Kuma
+
+    function tickColor(status) {
+      if (status === 1) return 'bg-green-500';
+      if (status === 0) return 'bg-red-500';
+      if (status === 2) return 'bg-yellow-500';
+      if (status === 3) return 'bg-blue-500';
+      return 'bg-gray-600';
+    }
 
     function statusDot(status) {
       if (status === 1) return 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.8)]';
@@ -104,10 +112,25 @@
         } else {
           monitors.slice(0, SLOTS_PER_COLUMN).forEach(m => {
             const pill = document.createElement('div');
-            pill.className = 'flex items-center gap-1.5 bg-[#181c23] rounded px-2 py-1';
-            pill.innerHTML =
+            pill.className = 'flex flex-col bg-[#181c23] rounded px-2 py-1.5 gap-1';
+
+            const topRow = document.createElement('div');
+            topRow.className = 'flex items-center gap-1.5';
+            topRow.innerHTML =
               '<span class="w-2 h-2 rounded-full flex-shrink-0 ' + statusDot(m.status) + '"></span>' +
               '<span class="text-[11px] leading-none truncate">' + m.name + '</span>';
+
+            const beats = (m.recentBeats && m.recentBeats.length > 0) ? m.recentBeats : [null];
+            const bar = document.createElement('div');
+            bar.className = 'flex gap-px';
+            beats.forEach(s => {
+              const tick = document.createElement('span');
+              tick.className = 'flex-1 h-1 rounded-sm ' + tickColor(s);
+              bar.appendChild(tick);
+            });
+
+            pill.appendChild(topRow);
+            pill.appendChild(bar);
             list.appendChild(pill);
           });
 

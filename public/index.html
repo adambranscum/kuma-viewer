@@ -1,18 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<title>Status Wallboard</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-  html, body {
-    height: 100vh;
-    overflow: hidden;
-    background: #0b0d10;
-  }
-  .col-scroll::-webkit-scrollbar { display: none; }
-</style>
+  <meta charset="UTF-8">
+  <title>Status Wallboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html,
+    body {
+      height: 100vh;
+      overflow: hidden;
+      background: #0b0d10;
+    }
+
+    .col-scroll::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
 </head>
+
 <body class="text-gray-200 font-sans">
 
   <div class="h-screen w-screen flex flex-col px-6 py-4 box-border">
@@ -27,94 +33,100 @@
 
   </div>
 
-<script>
-  const ROWS = [
-    'Servers',
-    'Applications',
-    'Services',
-    'Websites',
-    'Network Appliances',
-    'Cameras & Security'
-  ];
+  <script>
+    const ROWS = [
+      'Servers',
+      'Applications',
+      'Services',
+      'Websites',
+      'Network Appliances',
+      'Cameras & Security'
+    ];
 
-  const SLOTS_PER_COLUMN = 20;
-  const FALLBACK_COLOR = '#4b5563'; // gray-600, used if a tag has no color set in Kuma
+    const SLOTS_PER_COLUMN = 20;
+    const FALLBACK_COLOR = '#4b5563'; // gray-600, used if a tag has no color set in Kuma
 
-  function statusDot(status) {
-    if (status === 1) return 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.8)]';
-    if (status === 0) return 'bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.8)]';
-    if (status === 2) return 'bg-yellow-500';
-    if (status === 3) return 'bg-blue-500';
-    return 'bg-gray-600';
-  }
-
-  async function load() {
-    try {
-      const res = await fetch('/api/status');
-      const data = await res.json();
-      render(data.rows, data.rowColors || {});
-    } catch (e) {
-      document.getElementById('board').innerHTML =
-        '<div class="col-span-6 text-center text-gray-500 text-sm">Could not reach viewer backend.</div>';
+    function statusDot(status) {
+      if (status === 1) return 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.8)]';
+      if (status === 0) return 'bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.8)]';
+      if (status === 2) return 'bg-yellow-500';
+      if (status === 3) return 'bg-blue-500';
+      return 'bg-gray-600';
     }
-    document.getElementById('updated').textContent =
-      'Updated ' + new Date().toLocaleTimeString();
-  }
 
-  function render(rows, rowColors) {
-    const board = document.getElementById('board');
-    board.innerHTML = '';
-
-    ROWS.forEach(colName => {
-      const monitors = (rows && rows[colName]) || [];
-      const tagColor = (rowColors && rowColors[colName]) || FALLBACK_COLOR;
-
-      const col = document.createElement('div');
-      col.className = 'flex flex-col min-h-0 bg-[#11141a] border border-gray-800 rounded-md overflow-hidden';
-      col.style.borderTopColor = tagColor;
-      col.style.borderTopWidth = '3px';
-
-      const header = document.createElement('div');
-      header.className = 'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider border-b border-gray-800 bg-[#0e1116] flex-shrink-0 truncate flex items-center gap-1.5';
-      header.innerHTML =
-        '<span class="w-2 h-2 rounded-full flex-shrink-0" style="background:' + tagColor + '"></span>' +
-        '<span style="color:' + tagColor + '">' + colName + '</span>' +
-        '<span class="text-gray-500 font-normal">(' + monitors.length + ')</span>';
-      col.appendChild(header);
-
-      const list = document.createElement('div');
-      list.className = 'col-scroll flex-1 overflow-y-auto px-1.5 py-1.5 flex flex-col gap-1';
-
-      if (monitors.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'text-[11px] text-gray-600 italic px-1.5 py-1';
-        empty.textContent = 'No monitors tagged';
-        list.appendChild(empty);
-      } else {
-        monitors.slice(0, SLOTS_PER_COLUMN).forEach(m => {
-          const pill = document.createElement('div');
-          pill.className = 'flex items-center gap-1.5 bg-[#181c23] rounded px-2 py-1';
-          pill.innerHTML =
-            '<span class="w-2 h-2 rounded-full flex-shrink-0 ' + statusDot(m.status) + '"></span>' +
-            '<span class="text-[11px] leading-none truncate">' + m.name + '</span>';
-          list.appendChild(pill);
-        });
-
-        if (monitors.length > SLOTS_PER_COLUMN) {
-          const overflow = document.createElement('div');
-          overflow.className = 'text-[10px] text-gray-600 italic px-1.5 pt-0.5';
-          overflow.textContent = '+' + (monitors.length - SLOTS_PER_COLUMN) + ' more';
-          list.appendChild(overflow);
+    async function load() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        if (!data.socketConnected) {
+          document.getElementById('board').innerHTML =
+            '<div class="col-span-6 text-center text-yellow-500 text-sm">Waiting on Uptime Kuma login (Socket.IO not connected yet)...</div>';
+        } else {
+          render(data.rows, data.rowColors || {});
         }
+      } catch (e) {
+        document.getElementById('board').innerHTML =
+          '<div class="col-span-6 text-center text-gray-500 text-sm">Could not reach viewer backend.</div>';
       }
+      document.getElementById('updated').textContent =
+        'Updated ' + new Date().toLocaleTimeString();
+    }
 
-      col.appendChild(list);
-      board.appendChild(col);
-    });
-  }
+    function render(rows, rowColors) {
+      const board = document.getElementById('board');
+      board.innerHTML = '';
 
-  load();
-  setInterval(load, 30000);
-</script>
+      ROWS.forEach(colName => {
+        const monitors = (rows && rows[colName]) || [];
+        const tagColor = (rowColors && rowColors[colName]) || FALLBACK_COLOR;
+
+        const col = document.createElement('div');
+        col.className = 'flex flex-col min-h-0 bg-[#11141a] border border-gray-800 rounded-md overflow-hidden';
+        col.style.borderTopColor = tagColor;
+        col.style.borderTopWidth = '3px';
+
+        const header = document.createElement('div');
+        header.className = 'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider border-b border-gray-800 bg-[#0e1116] flex-shrink-0 truncate flex items-center gap-1.5';
+        header.innerHTML =
+          '<span class="w-2 h-2 rounded-full flex-shrink-0" style="background:' + tagColor + '"></span>' +
+          '<span style="color:' + tagColor + '">' + colName + '</span>' +
+          '<span class="text-gray-500 font-normal">(' + monitors.length + ')</span>';
+        col.appendChild(header);
+
+        const list = document.createElement('div');
+        list.className = 'col-scroll flex-1 overflow-y-auto px-1.5 py-1.5 flex flex-col gap-1';
+
+        if (monitors.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'text-[11px] text-gray-600 italic px-1.5 py-1';
+          empty.textContent = 'No monitors tagged';
+          list.appendChild(empty);
+        } else {
+          monitors.slice(0, SLOTS_PER_COLUMN).forEach(m => {
+            const pill = document.createElement('div');
+            pill.className = 'flex items-center gap-1.5 bg-[#181c23] rounded px-2 py-1';
+            pill.innerHTML =
+              '<span class="w-2 h-2 rounded-full flex-shrink-0 ' + statusDot(m.status) + '"></span>' +
+              '<span class="text-[11px] leading-none truncate">' + m.name + '</span>';
+            list.appendChild(pill);
+          });
+
+          if (monitors.length > SLOTS_PER_COLUMN) {
+            const overflow = document.createElement('div');
+            overflow.className = 'text-[10px] text-gray-600 italic px-1.5 pt-0.5';
+            overflow.textContent = '+' + (monitors.length - SLOTS_PER_COLUMN) + ' more';
+            list.appendChild(overflow);
+          }
+        }
+
+        col.appendChild(list);
+        board.appendChild(col);
+      });
+    }
+
+    load();
+    setInterval(load, 30000);
+  </script>
 </body>
+
 </html>

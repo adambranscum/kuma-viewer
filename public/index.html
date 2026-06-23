@@ -29,23 +29,18 @@
       <span id="updated" class="text-xs text-gray-500"></span>
     </div>
 
-    <div id="board" class="grid grid-cols-6 gap-4 flex-1 min-h-0">
+    <div id="board" class="grid grid-cols-5 gap-4 flex-1 min-h-0">
     </div>
 
   </div>
 
   <script>
-    const ROWS = [
-      'Servers',
-      'Applications',
-      'Services',
-      'Websites',
-      'Network Appliances',
-      'Cameras & Security'
-    ];
-
-    const SLOTS_PER_COLUMN = 15;
-    const FALLBACK_COLOR = '#4b5563'; // gray-600, used if a tag has no color set in Kuma
+    const COLUMN_ORDER = ['Servers', 'Services', 'Websites', 'Network Appliances', 'Cameras & Security'];
+    const BRANCHED_COLS = new Set(['Servers', 'Services', 'Network Appliances', 'Cameras & Security']);
+    const BRANCHES = ['Argenta', 'Laman'];
+    const SLOTS_PER_COLUMN = 15;  // for single columns (Websites)
+    const SLOTS_PER_SECTION = 8;  // per branch half-column
+    const FALLBACK_COLOR = '#4b5563';
 
     function tickColor(status) {
       if (status === 1) return 'bg-green-500';
@@ -63,87 +58,116 @@
       return 'bg-gray-600';
     }
 
+    function buildMonitorList(monitors, limit) {
+      const list = document.createElement('div');
+      list.className = 'col-scroll flex-1 overflow-y-auto px-1.5 py-1.5 flex flex-col gap-1';
+
+      if (monitors.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'text-[11px] text-gray-600 italic px-1.5 py-1';
+        empty.textContent = 'No monitors tagged';
+        list.appendChild(empty);
+      } else {
+        monitors.slice(0, limit).forEach(m => {
+          const pill = document.createElement('div');
+          pill.className = 'flex flex-col bg-[#181c23] rounded px-2 py-1.5 gap-1';
+
+          const topRow = document.createElement('div');
+          topRow.className = 'flex items-center gap-1.5';
+          topRow.innerHTML =
+            '<span class="w-2 h-2 rounded-full flex-shrink-0 ' + statusDot(m.status) + '"></span>' +
+            '<span class="text-[11px] leading-none truncate">' + m.name + '</span>';
+
+          const beats = (m.recentBeats && m.recentBeats.length > 0) ? m.recentBeats : [null];
+          const bar = document.createElement('div');
+          bar.className = 'flex gap-px';
+          beats.forEach(s => {
+            const tick = document.createElement('span');
+            tick.className = 'flex-1 h-1 rounded-sm ' + tickColor(s);
+            bar.appendChild(tick);
+          });
+
+          pill.appendChild(topRow);
+          pill.appendChild(bar);
+          list.appendChild(pill);
+        });
+
+        if (monitors.length > limit) {
+          const overflow = document.createElement('div');
+          overflow.className = 'text-[10px] text-gray-600 italic px-1.5 pt-0.5';
+          overflow.textContent = '+' + (monitors.length - limit) + ' more';
+          list.appendChild(overflow);
+        }
+      }
+
+      return list;
+    }
+
     async function load() {
       try {
         const res = await fetch('/api/status');
         const data = await res.json();
         if (!data.socketConnected) {
           document.getElementById('board').innerHTML =
-            '<div class="col-span-6 text-center text-yellow-500 text-sm">Waiting on Uptime Kuma login (Socket.IO not connected yet)...</div>';
+            '<div class="col-span-5 text-center text-yellow-500 text-sm">Waiting on Uptime Kuma login (Socket.IO not connected yet)...</div>';
         } else {
-          render(data.rows, data.rowColors || {});
+          render(data.columns);
         }
       } catch (e) {
         document.getElementById('board').innerHTML =
-          '<div class="col-span-6 text-center text-gray-500 text-sm">Could not reach viewer backend.</div>';
+          '<div class="col-span-5 text-center text-gray-500 text-sm">Could not reach viewer backend.</div>';
       }
       document.getElementById('updated').textContent =
         'Updated ' + new Date().toLocaleTimeString();
     }
 
-    function render(rows, rowColors) {
+    function render(columns) {
       const board = document.getElementById('board');
       board.innerHTML = '';
 
-      ROWS.forEach(colName => {
-        const monitors = (rows && rows[colName]) || [];
-        const tagColor = (rowColors && rowColors[colName]) || FALLBACK_COLOR;
+      COLUMN_ORDER.forEach(colName => {
+        const colData = columns && columns[colName];
+        if (!colData) return;
+        const color = colData.color || FALLBACK_COLOR;
 
         const col = document.createElement('div');
         col.className = 'flex flex-col min-h-0 bg-[#11141a] border border-gray-800 rounded-md overflow-hidden';
-        col.style.borderTopColor = tagColor;
+        col.style.borderTopColor = color;
         col.style.borderTopWidth = '3px';
 
-        const header = document.createElement('div');
-        header.className = 'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider border-b border-gray-800 bg-[#0e1116] flex-shrink-0 truncate flex items-center gap-1.5';
-        header.innerHTML =
-          '<span class="w-2 h-2 rounded-full flex-shrink-0" style="background:' + tagColor + '"></span>' +
-          '<span style="color:' + tagColor + '">' + colName + '</span>' +
-          '<span class="text-gray-500 font-normal">(' + monitors.length + ')</span>';
-        col.appendChild(header);
+        if (colData.split) {
+          BRANCHES.forEach((branch, idx) => {
+            const monitors = (colData.branches && colData.branches[branch]) || [];
 
-        const list = document.createElement('div');
-        list.className = 'col-scroll flex-1 overflow-y-auto px-1.5 py-1.5 flex flex-col gap-1';
+            const section = document.createElement('div');
+            section.className = 'flex flex-col min-h-0 flex-1' + (idx === 0 ? ' border-b border-gray-700' : '');
 
-        if (monitors.length === 0) {
-          const empty = document.createElement('div');
-          empty.className = 'text-[11px] text-gray-600 italic px-1.5 py-1';
-          empty.textContent = 'No monitors tagged';
-          list.appendChild(empty);
-        } else {
-          monitors.slice(0, SLOTS_PER_COLUMN).forEach(m => {
-            const pill = document.createElement('div');
-            pill.className = 'flex flex-col bg-[#181c23] rounded px-2 py-1.5 gap-1';
+            const header = document.createElement('div');
+            header.className = 'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider border-b border-gray-800 bg-[#0e1116] flex-shrink-0 flex items-center gap-1.5';
+            header.innerHTML =
+              '<span class="w-2 h-2 rounded-full flex-shrink-0" style="background:' + color + '"></span>' +
+              '<span style="color:' + color + '">' + colName + '</span>' +
+              '<span class="text-gray-500 font-normal text-[10px]">/ ' + branch + '</span>' +
+              '<span class="text-gray-500 font-normal ml-auto">(' + monitors.length + ')</span>';
 
-            const topRow = document.createElement('div');
-            topRow.className = 'flex items-center gap-1.5';
-            topRow.innerHTML =
-              '<span class="w-2 h-2 rounded-full flex-shrink-0 ' + statusDot(m.status) + '"></span>' +
-              '<span class="text-[11px] leading-none truncate">' + m.name + '</span>';
-
-            const beats = (m.recentBeats && m.recentBeats.length > 0) ? m.recentBeats : [null];
-            const bar = document.createElement('div');
-            bar.className = 'flex gap-px';
-            beats.forEach(s => {
-              const tick = document.createElement('span');
-              tick.className = 'flex-1 h-1 rounded-sm ' + tickColor(s);
-              bar.appendChild(tick);
-            });
-
-            pill.appendChild(topRow);
-            pill.appendChild(bar);
-            list.appendChild(pill);
+            section.appendChild(header);
+            section.appendChild(buildMonitorList(monitors, SLOTS_PER_SECTION));
+            col.appendChild(section);
           });
+        } else {
+          const monitors = colData.monitors || [];
 
-          if (monitors.length > SLOTS_PER_COLUMN) {
-            const overflow = document.createElement('div');
-            overflow.className = 'text-[10px] text-gray-600 italic px-1.5 pt-0.5';
-            overflow.textContent = '+' + (monitors.length - SLOTS_PER_COLUMN) + ' more';
-            list.appendChild(overflow);
-          }
+          const header = document.createElement('div');
+          header.className = 'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider border-b border-gray-800 bg-[#0e1116] flex-shrink-0 truncate flex items-center gap-1.5';
+          header.innerHTML =
+            '<span class="w-2 h-2 rounded-full flex-shrink-0" style="background:' + color + '"></span>' +
+            '<span style="color:' + color + '">' + colName + '</span>' +
+            '<span class="text-gray-500 font-normal">(' + monitors.length + ')</span>';
+
+          col.appendChild(header);
+          col.appendChild(buildMonitorList(monitors, SLOTS_PER_COLUMN));
         }
 
-        col.appendChild(list);
         board.appendChild(col);
       });
     }

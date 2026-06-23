@@ -11,14 +11,10 @@ const KUMA_USERNAME = process.env.KUMA_USERNAME;
 const KUMA_PASSWORD = process.env.KUMA_PASSWORD;
 const STATUS_PAGE_SLUG = process.env.STATUS_PAGE_SLUG || 'viewer';
 
-const ROWS = [
-    'Servers',
-    'Applications',
-    'Services',
-    'Websites',
-    'Network Appliances',
-    'Cameras & Security'
-];
+const BRANCHED_ROWS = ['Servers', 'Services', 'Network Appliances', 'Cameras & Security'];
+const SINGLE_ROWS = ['Websites'];
+const BRANCHES = ['Argenta', 'Laman'];
+const ALL_CATEGORIES = [...BRANCHED_ROWS, ...SINGLE_ROWS];
 
 // In-memory cache of monitor metadata (id -> { name, tags: [{name, color}] })
 let monitorCache = {};
@@ -70,44 +66,54 @@ app.get('/api/status', async (req, res) => {
         if (!hbRes.ok) throw new Error(`heartbeat fetch failed: ${hbRes.status}`);
         const hbData = await hbRes.json();
 
-        const rows = {};
-        const rowColors = {};
-        ROWS.forEach(r => {
-            rows[r] = [];
-            rowColors[r] = null;
-        });
+        // Initialize columns — branched categories split by Argenta/Laman, single categories flat
+        const columns = {};
+        for (const cat of BRANCHED_ROWS) {
+            columns[cat] = { split: true, color: null, branches: { Argenta: [], Laman: [] } };
+        }
+        for (const cat of SINGLE_ROWS) {
+            columns[cat] = { split: false, color: null, monitors: [] };
+        }
 
         for (const monitorId of Object.keys(monitorCache)) {
             const monitor = monitorCache[monitorId];
             const tags = monitor.tags || [];
 
-            const matchedTag = tags.find(t =>
-                ROWS.some(r => r.toLowerCase() === (t.name || '').trim().toLowerCase())
+            const categoryTag = tags.find(t =>
+                ALL_CATEGORIES.some(c => c.toLowerCase() === (t.name || '').trim().toLowerCase())
             );
-            if (!matchedTag) continue;
+            if (!categoryTag) continue;
 
-            const matchedRow = ROWS.find(
-                r => r.toLowerCase() === matchedTag.name.trim().toLowerCase()
+            const categoryName = ALL_CATEGORIES.find(
+                c => c.toLowerCase() === categoryTag.name.trim().toLowerCase()
             );
+            const col = columns[categoryName];
 
-            if (!rowColors[matchedRow] && matchedTag.color) {
-                rowColors[matchedRow] = matchedTag.color;
+            if (!col.color && categoryTag.color) {
+                col.color = categoryTag.color;
             }
 
             const beats = hbData.heartbeatList?.[monitorId] || [];
             const lastBeat = beats[beats.length - 1];
             const status = lastBeat ? lastBeat.status : null;
             const recentBeats = beats.slice(-20).map(b => b.status);
+            const monitorObj = { id: monitor.id, name: monitor.name, status, recentBeats };
 
-            rows[matchedRow].push({
-                id: monitor.id,
-                name: monitor.name,
-                status,
-                recentBeats,
-            });
+            if (col.split) {
+                const branchTag = tags.find(t =>
+                    BRANCHES.some(b => b.toLowerCase() === (t.name || '').trim().toLowerCase())
+                );
+                if (!branchTag) continue; // skip monitors with no branch tag in a branched category
+                const branchName = BRANCHES.find(
+                    b => b.toLowerCase() === branchTag.name.trim().toLowerCase()
+                );
+                col.branches[branchName].push(monitorObj);
+            } else {
+                col.monitors.push(monitorObj);
+            }
         }
 
-        res.json({ rows, rowColors, socketConnected, monitorCount: Object.keys(monitorCache).length });
+        res.json({ columns, socketConnected, monitorCount: Object.keys(monitorCache).length });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: err.message });

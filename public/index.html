@@ -29,16 +29,23 @@
       <span id="updated" class="text-xs text-gray-500"></span>
     </div>
 
-    <div id="board" class="grid grid-cols-5 gap-4 flex-1 min-h-0">
+    <div id="board" class="grid grid-cols-6 gap-4 flex-1 min-h-0">
     </div>
 
   </div>
 
   <script>
-    const COLUMN_ORDER = ['Servers', 'Services', 'Websites', 'Network Appliances', 'Cameras & Security'];
-    const BRANCHED_COLS = new Set(['Servers', 'Services', 'Network Appliances', 'Cameras & Security']);
-    const BRANCHES = ['Argenta', 'Laman'];
-    const SLOTS_PER_COLUMN = 15;  // for single columns (Websites)
+    const COLUMN_ORDER = ['Servers', 'Services', 'Websites', 'Network Appliances', 'Printers', 'Library Applications'];
+    const BRANCHED_COLS = new Set(['Servers', 'Services', 'Websites', 'Network Appliances', 'Printers']);
+    const COLUMN_BRANCHES = {
+      'Servers': ['Argenta', 'Laman'],
+      'Services': ['Argenta', 'Laman'],
+      'Websites': ['Argenta', 'Laman'],
+      'Network Appliances': ['Argenta', 'Laman'],
+      'Printers': ['Argenta', 'Laman'],
+    };
+    const BRANCHES = ['Argenta', 'Laman'];  // fallback
+    const SLOTS_PER_COLUMN = 15;  // for single columns
     const SLOTS_PER_SECTION = 15;  // per branch half-column
     const FALLBACK_COLOR = '#4b5563';
 
@@ -109,13 +116,13 @@
         const data = await res.json();
         if (!data.socketConnected) {
           document.getElementById('board').innerHTML =
-            '<div class="col-span-5 text-center text-yellow-500 text-sm">Waiting on Uptime Kuma login (Socket.IO not connected yet)...</div>';
+            '<div class="col-span-6 text-center text-yellow-500 text-sm">Waiting on Uptime Kuma login (Socket.IO not connected yet)...</div>';
         } else {
           render(data.columns);
         }
       } catch (e) {
         document.getElementById('board').innerHTML =
-          '<div class="col-span-5 text-center text-gray-500 text-sm">Could not reach viewer backend.</div>';
+          '<div class="col-span-6 text-center text-gray-500 text-sm">Could not reach viewer backend.</div>';
       }
       document.getElementById('updated').textContent =
         'Updated ' + new Date().toLocaleTimeString();
@@ -136,7 +143,9 @@
         col.style.borderTopWidth = '3px';
 
         if (colData.split) {
-          BRANCHES.forEach((branch, idx) => {
+          const branches = COLUMN_BRANCHES[colName] || BRANCHES;
+          let sectionIdx = 0;
+          branches.forEach((branch, idx) => {
             const monitors = (colData.branches && colData.branches[branch]) || [];
 
             const section = document.createElement('div');
@@ -149,6 +158,27 @@
               '<span class="w-2 h-2 rounded-full flex-shrink-0" style="background:' + color + '"></span>' +
               '<span style="color:' + color + '">' + colName + '</span>' +
               '<span class="text-gray-500 font-normal text-[10px]">/ ' + branch + '</span>' +
+              '<span class="text-gray-500 font-normal ml-auto">(' + monitors.length + ')</span>';
+
+            section.appendChild(header);
+            section.appendChild(buildMonitorList(monitors, SLOTS_PER_SECTION));
+            col.appendChild(section);
+            sectionIdx++;
+          });
+
+          // Render extra tag-based sections (e.g. Databases in Services)
+          const extraSections = colData.extraSections || {};
+          Object.keys(extraSections).forEach((sectionName) => {
+            const monitors = extraSections[sectionName] || [];
+            const section = document.createElement('div');
+            section.className = 'flex flex-col min-h-0 border-t border-gray-700';
+            section.style.flexGrow = Math.max(1, monitors.length);
+
+            const header = document.createElement('div');
+            header.className = 'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider border-b border-gray-800 bg-[#0e1116] flex-shrink-0 flex items-center gap-1.5';
+            header.innerHTML =
+              '<span class="w-2 h-2 rounded-full flex-shrink-0" style="background:' + color + '"></span>' +
+              '<span style="color:' + color + '">' + sectionName + '</span>' +
               '<span class="text-gray-500 font-normal ml-auto">(' + monitors.length + ')</span>';
 
             section.appendChild(header);

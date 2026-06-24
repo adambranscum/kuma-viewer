@@ -11,13 +11,24 @@ const KUMA_USERNAME = process.env.KUMA_USERNAME;
 const KUMA_PASSWORD = process.env.KUMA_PASSWORD;
 const STATUS_PAGE_SLUG = process.env.STATUS_PAGE_SLUG || 'viewer';
 
-const BRANCHED_ROWS = ['Servers', 'Services', 'Network Appliances', 'Cameras & Security'];
-const SINGLE_ROWS = ['Websites'];
-const BRANCHES = ['Argenta', 'Laman'];
-const ALL_CATEGORIES = [...BRANCHED_ROWS, ...SINGLE_ROWS];
+const COLUMN_CONFIG = {
+  'Servers':              { split: true,  branches: ['Argenta', 'Laman'] },
+  'Services':             { split: true,  branches: ['Argenta', 'Laman'], extraSections: ['Databases'] },
+  'Websites':             { split: true,  branches: ['Argenta', 'Laman'] },
+  'Network Appliances':   { split: true,  branches: ['Argenta', 'Laman'] },
+  'Printers':             { split: true,  branches: ['Argenta', 'Laman'] },
+  'Library Applications': { split: false },
+};
+// Monitors tagged with these go to the specified column's extraSections (not via category matching)
+const EXTRA_SECTION_TAGS = { 'Databases': 'Services' };
+const BRANCHED_ROWS = Object.entries(COLUMN_CONFIG).filter(([_, c]) => c.split).map(([k]) => k);
+const SINGLE_ROWS   = Object.entries(COLUMN_CONFIG).filter(([_, c]) => !c.split).map(([k]) => k);
+const ALL_CATEGORIES = Object.keys(COLUMN_CONFIG);
 
 // In-memory cache of monitor metadata (id -> { name, tags: [{name, color}] })
 let monitorCache = {};
+// In-memory cache of heartbeat history for all monitors (id -> [...beat objects])
+let heartbeatCache = {};
 let socketConnected = false;
 
 function connectSocket() {
@@ -45,6 +56,21 @@ function connectSocket() {
         console.log(`Monitor list updated: ${Object.keys(monitorCache).length} monitors`);
     });
 
+    // Uptime Kuma pushes full heartbeat history per monitor after login (all monitors, not just status-page ones)
+    socket.on('heartbeatList', (monitorID, data) => {
+        heartbeatCache[String(monitorID)] = data || [];
+    });
+
+    // Real-time heartbeat updates — append and keep last 50
+    socket.on('heartbeat', (data) => {
+        const id = String(data.monitorID);
+        if (!heartbeatCache[id]) heartbeatCache[id] = [];
+        heartbeatCache[id].push(data);
+        if (heartbeatCache[id].length > 50) {
+            heartbeatCache[id] = heartbeatCache[id].slice(-50);
+        }
+    });
+
     socket.on('disconnect', () => {
         socketConnected = false;
         console.log('Socket.IO disconnected, will auto-reconnect');
@@ -66,18 +92,41 @@ app.get('/api/status', async (req, res) => {
         if (!hbRes.ok) throw new Error(`heartbeat fetch failed: ${hbRes.status}`);
         const hbData = await hbRes.json();
 
-        // Initialize columns — branched categories split by Argenta/Laman, single categories flat
+        // Initialize columns — branched categories split by branch, single categories flat
         const columns = {};
-        for (const cat of BRANCHED_ROWS) {
-            columns[cat] = { split: true, color: null, branches: { Argenta: [], Laman: [] } };
-        }
-        for (const cat of SINGLE_ROWS) {
-            columns[cat] = { split: false, color: null, monitors: [] };
+        for (const [cat, config] of Object.entries(COLUMN_CONFIG)) {
+            if (config.split) {
+                const branches = {};
+                config.branches.forEach(b => branches[b] = []);
+                const extra = {};
+                (config.extraSections || []).forEach(e => extra[e] = []);
+                columns[cat] = { split: true, color: null, branches, extraSections: extra };
+            } else {
+                columns[cat] = { split: false, color: null, monitors: [] };
+            }
         }
 
         for (const monitorId of Object.keys(monitorCache)) {
             const monitor = monitorCache[monitorId];
             const tags = monitor.tags || [];
+
+            // Check extra section tags first (e.g. "Databases" routes to Services column)
+            const extraTag = tags.find(t =>
+                EXTRA_SECTION_TAGS[t.name.trim()] !== undefined
+            );
+            if (extraTag) {
+                const targetColName = EXTRA_SECTION_TAGS[extraTag.name.trim()];
+                const col = columns[targetColName];
+                if (col && col.extraSections && col.extraSections[extraTag.name.trim()] !== undefined) {
+                    if (!col.color && extraTag.color) col.color = extraTag.color;
+                    const beats = heartbeatCache[monitorId] || hbData.heartbeatList?.[monitorId] || [];
+                    const lastBeat = beats[beats.length - 1];
+                    const status = lastBeat ? lastBeat.status : null;
+                    const recentBeats = beats.slice(-20).map(b => b.status);
+                    col.extraSections[extraTag.name.trim()].push({ id: monitor.id, name: monitor.name, status, recentBeats });
+                    continue;
+                }
+            }
 
             const categoryTag = tags.find(t =>
                 ALL_CATEGORIES.some(c => c.toLowerCase() === (t.name || '').trim().toLowerCase())
@@ -93,18 +142,20 @@ app.get('/api/status', async (req, res) => {
                 col.color = categoryTag.color;
             }
 
-            const beats = hbData.heartbeatList?.[monitorId] || [];
+            // Prefer socket-cached beats (covers all monitors); fall back to status-page HTTP data
+            const beats = heartbeatCache[monitorId] || hbData.heartbeatList?.[monitorId] || [];
             const lastBeat = beats[beats.length - 1];
             const status = lastBeat ? lastBeat.status : null;
             const recentBeats = beats.slice(-20).map(b => b.status);
             const monitorObj = { id: monitor.id, name: monitor.name, status, recentBeats };
 
             if (col.split) {
+                const colBranches = COLUMN_CONFIG[categoryName].branches;
                 const branchTag = tags.find(t =>
-                    BRANCHES.some(b => b.toLowerCase() === (t.name || '').trim().toLowerCase())
+                    colBranches.some(b => b.toLowerCase() === (t.name || '').trim().toLowerCase())
                 );
                 if (!branchTag) continue; // skip monitors with no branch tag in a branched category
-                const branchName = BRANCHES.find(
+                const branchName = colBranches.find(
                     b => b.toLowerCase() === branchTag.name.trim().toLowerCase()
                 );
                 col.branches[branchName].push(monitorObj);

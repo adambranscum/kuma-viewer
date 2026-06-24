@@ -13,14 +13,15 @@ const STATUS_PAGE_SLUG = process.env.STATUS_PAGE_SLUG || 'viewer';
 
 const COLUMN_CONFIG = {
   'Servers':              { split: true,  branches: ['Argenta', 'Laman'] },
-  'Services':             { split: true,  branches: ['Argenta', 'Laman'], extraSections: ['Databases'] },
-  'Websites':             { split: true,  branches: ['Argenta', 'Laman'] },
+  'Services':             { split: true,  branches: ['Argenta', 'Laman'] },
   'Network Appliances':   { split: true,  branches: ['Argenta', 'Laman'] },
   'Printers':             { split: true,  branches: ['Argenta', 'Laman'] },
+  'Websites':             { split: false },
   'Library Applications': { split: false },
+  'Databases':            { split: false },
 };
 // Monitors tagged with these go to the specified column's extraSections (not via category matching)
-const EXTRA_SECTION_TAGS = { 'Databases': 'Services' };
+const EXTRA_SECTION_TAGS = {};
 const BRANCHED_ROWS = Object.entries(COLUMN_CONFIG).filter(([_, c]) => c.split).map(([k]) => k);
 const SINGLE_ROWS   = Object.entries(COLUMN_CONFIG).filter(([_, c]) => !c.split).map(([k]) => k);
 const ALL_CATEGORIES = Object.keys(COLUMN_CONFIG);

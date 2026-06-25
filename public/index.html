@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>Status Wallboard</title>
+  <title>NLRPLS Monitoring</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     html,
@@ -48,6 +48,11 @@
     const SLOTS_PER_SECTION = 15;  // per branch half-column
     const FALLBACK_COLOR = '#4b5563';
 
+    // Monitors whose name matches one of these are rendered with the
+    // fleet-style health bar (X/Y overlay, percentage-based color) instead
+    // of the normal status dot + heartbeat tick row.
+    const FLEET_MONITOR_NAMES = ['Vipre Endpoint Fleet'];
+
     function tickColor(status) {
       if (status === 1) return 'bg-green-500';
       if (status === 0) return 'bg-red-500';
@@ -62,6 +67,35 @@
       if (status === 2) return 'bg-yellow-500';
       if (status === 3) return 'bg-blue-500';
       return 'bg-gray-600';
+    }
+
+    // Parses counts out of messages like "3 of 166 devices unhealthy" or
+    // "All 166 devices healthy". Returns { healthy, total } or null if the
+    // message doesn't match either pattern.
+    function parseFleetCounts(msg) {
+      if (!msg) return null;
+
+      let m = msg.match(/(\d+)\s+of\s+(\d+)/i);
+      if (m) {
+        const unhealthy = parseInt(m[1], 10);
+        const total = parseInt(m[2], 10);
+        return { healthy: total - unhealthy, total };
+      }
+
+      m = msg.match(/All\s+(\d+)/i);
+      if (m) {
+        const total = parseInt(m[1], 10);
+        return { healthy: total, total };
+      }
+
+      return null;
+    }
+
+    // 100% -> green, 75-99% -> yellow, below 75% -> red
+    function fleetBarColor(pct) {
+      if (pct >= 100) return 'bg-green-500';
+      if (pct >= 75) return 'bg-yellow-500';
+      return 'bg-red-500';
     }
 
     function buildMonitorList(monitors, limit) {
@@ -80,21 +114,43 @@
 
           const topRow = document.createElement('div');
           topRow.className = 'flex items-center gap-1.5';
-          topRow.innerHTML =
-            '<span class="w-2 h-2 rounded-full flex-shrink-0 ' + statusDot(m.status) + '"></span>' +
-            '<span class="text-[11px] leading-none truncate">' + m.name + '</span>';
 
-          const beats = (m.recentBeats && m.recentBeats.length > 0) ? m.recentBeats : [null];
-          const bar = document.createElement('div');
-          bar.className = 'flex gap-px';
-          beats.forEach(s => {
-            const tick = document.createElement('span');
-            tick.className = 'flex-1 h-1 rounded-sm ' + tickColor(s);
-            bar.appendChild(tick);
-          });
+          const fleetCounts = FLEET_MONITOR_NAMES.includes(m.name) ? parseFleetCounts(m.msg) : null;
 
-          pill.appendChild(topRow);
-          pill.appendChild(bar);
+          if (fleetCounts) {
+            const pct = fleetCounts.total > 0 ? (fleetCounts.healthy / fleetCounts.total) * 100 : 0;
+            const color = fleetBarColor(pct);
+
+            topRow.innerHTML =
+              '<span class="w-2 h-2 rounded-full flex-shrink-0 ' + color + '"></span>' +
+              '<span class="text-[11px] leading-none truncate">' + m.name + '</span>';
+
+            const fleetBar = document.createElement('div');
+            fleetBar.className = 'relative h-4 rounded-sm overflow-hidden ' + color + ' flex items-center justify-center';
+            fleetBar.innerHTML =
+              '<span class="text-[10px] font-semibold text-black/80 leading-none">' +
+              fleetCounts.healthy + '/' + fleetCounts.total + '</span>';
+
+            pill.appendChild(topRow);
+            pill.appendChild(fleetBar);
+          } else {
+            topRow.innerHTML =
+              '<span class="w-2 h-2 rounded-full flex-shrink-0 ' + statusDot(m.status) + '"></span>' +
+              '<span class="text-[11px] leading-none truncate">' + m.name + '</span>';
+
+            const beats = (m.recentBeats && m.recentBeats.length > 0) ? m.recentBeats : [null];
+            const bar = document.createElement('div');
+            bar.className = 'flex gap-px';
+            beats.forEach(s => {
+              const tick = document.createElement('span');
+              tick.className = 'flex-1 h-1 rounded-sm ' + tickColor(s);
+              bar.appendChild(tick);
+            });
+
+            pill.appendChild(topRow);
+            pill.appendChild(bar);
+          }
+
           list.appendChild(pill);
         });
 

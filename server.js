@@ -12,18 +12,18 @@ const KUMA_PASSWORD = process.env.KUMA_PASSWORD;
 const STATUS_PAGE_SLUG = process.env.STATUS_PAGE_SLUG || 'viewer';
 
 const COLUMN_CONFIG = {
-  'Servers':              { split: true,  branches: ['Argenta', 'Laman'] },
-  'Services':             { split: true,  branches: ['Argenta', 'Laman'] },
-  'Network Appliances':   { split: true,  branches: ['Argenta', 'Laman'] },
-  'Printers':             { split: true,  branches: ['Argenta', 'Laman'] },
-  'Websites':             { split: false },
-  'Library Applications': { split: false },
-  'Databases':            { split: false },
+    'Servers': { split: true, branches: ['Argenta', 'Laman'] },
+    'Services': { split: true, branches: ['Argenta', 'Laman'] },
+    'Network Appliances': { split: true, branches: ['Argenta', 'Laman'] },
+    'Printers': { split: true, branches: ['Argenta', 'Laman'] },
+    'Websites': { split: false },
+    'Library Applications': { split: false },
+    'Databases': { split: false },
 };
 // Monitors tagged with these go to the specified column's extraSections (not via category matching)
 const EXTRA_SECTION_TAGS = {};
 const BRANCHED_ROWS = Object.entries(COLUMN_CONFIG).filter(([_, c]) => c.split).map(([k]) => k);
-const SINGLE_ROWS   = Object.entries(COLUMN_CONFIG).filter(([_, c]) => !c.split).map(([k]) => k);
+const SINGLE_ROWS = Object.entries(COLUMN_CONFIG).filter(([_, c]) => !c.split).map(([k]) => k);
 const ALL_CATEGORIES = Object.keys(COLUMN_CONFIG);
 
 // In-memory cache of monitor metadata (id -> { name, tags: [{name, color}] })
@@ -123,8 +123,9 @@ app.get('/api/status', async (req, res) => {
                     const beats = heartbeatCache[monitorId] || hbData.heartbeatList?.[monitorId] || [];
                     const lastBeat = beats[beats.length - 1];
                     const status = lastBeat ? lastBeat.status : null;
+                    const msg = lastBeat ? lastBeat.msg : null;
                     const recentBeats = beats.slice(-20).map(b => b.status);
-                    col.extraSections[extraTag.name.trim()].push({ id: monitor.id, name: monitor.name, status, recentBeats });
+                    col.extraSections[extraTag.name.trim()].push({ id: monitor.id, name: monitor.name, status, msg, recentBeats });
                     continue;
                 }
             }
@@ -147,8 +148,9 @@ app.get('/api/status', async (req, res) => {
             const beats = heartbeatCache[monitorId] || hbData.heartbeatList?.[monitorId] || [];
             const lastBeat = beats[beats.length - 1];
             const status = lastBeat ? lastBeat.status : null;
+            const msg = lastBeat ? lastBeat.msg : null;
             const recentBeats = beats.slice(-20).map(b => b.status);
-            const monitorObj = { id: monitor.id, name: monitor.name, status, recentBeats };
+            const monitorObj = { id: monitor.id, name: monitor.name, status, msg, recentBeats };
 
             if (col.split) {
                 const colBranches = COLUMN_CONFIG[categoryName].branches;

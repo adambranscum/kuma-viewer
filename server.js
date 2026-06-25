@@ -53,10 +53,19 @@ function connectSocket() {
         console.log(`Monitor list updated: ${Object.keys(monitorCache).length} monitors`);
     });
 
-    // TEMPORARY DEBUG: print the raw payload exactly as received, no
-    // assumptions about shape. Remove this once we know the real format.
-    socket.on('heartbeatList', (rawPayload) => {
-        console.log('FULL RAW STRING:', rawPayload);
+    // Uptime Kuma sends this ONCE on initial load as a single object keyed
+    // by monitor ID: { "1": [...beats], "2": [...beats] } - NOT as repeated
+    // (monitorID, data) argument pairs. Loop over the keys to populate the
+    // cache correctly for every monitor at once.
+    socket.on('heartbeatList', (allBeats) => {
+        if (!allBeats || typeof allBeats !== 'object') {
+            console.error('Unexpected heartbeatList payload shape:', typeof allBeats);
+            return;
+        }
+        for (const [monitorID, beats] of Object.entries(allBeats)) {
+            heartbeatCache[String(monitorID)] = beats || [];
+        }
+        console.log(`Initial heartbeat history loaded for ${Object.keys(allBeats).length} monitors`);
     });
 
     socket.on('heartbeat', (data) => {

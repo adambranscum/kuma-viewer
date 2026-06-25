@@ -119,12 +119,14 @@
           const topRow = document.createElement('div');
           topRow.className = 'flex items-center gap-1.5';
 
-          const fleetCounts = FLEET_MONITOR_NAMES.includes(m.name) ? parseFleetCounts(m.msg) : null;
-          const unhealthyCounts = UNHEALTHY_FLEET_MONITOR_NAMES.includes(m.name) ? parseFleetCounts(m.msg) : null;
+          const isFleet = FLEET_MONITOR_NAMES.includes(m.name);
+          const isUnhealthyFleet = UNHEALTHY_FLEET_MONITOR_NAMES.includes(m.name);
+          const fleetCounts = isFleet ? parseFleetCounts(m.msg) : null;
+          const unhealthyCounts = isUnhealthyFleet ? parseFleetCounts(m.msg) : null;
 
-          if (unhealthyCounts) {
-            const unhealthy = unhealthyCounts.total - unhealthyCounts.healthy;
-            const color = unhealthy === 0 ? 'bg-green-500' : 'bg-red-500';
+          if (isUnhealthyFleet) {
+            const unhealthy = unhealthyCounts ? (unhealthyCounts.total - unhealthyCounts.healthy) : null;
+            const color = unhealthyCounts ? (unhealthy === 0 ? 'bg-green-500' : 'bg-red-500') : 'bg-gray-600';
 
             topRow.innerHTML =
               '<span class="w-2 h-2 rounded-full flex-shrink-0 ' + color + '"></span>' +
@@ -134,13 +136,13 @@
             fleetBar.className = 'relative h-4 rounded-sm overflow-hidden ' + color + ' flex items-center justify-center';
             fleetBar.innerHTML =
               '<span class="text-[10px] font-semibold text-black/80 leading-none">' +
-              unhealthy + ' unhealthy / ' + unhealthyCounts.total + '</span>';
+              (unhealthyCounts ? unhealthy + ' unhealthy / ' + unhealthyCounts.total : 'No data') + '</span>';
 
             pill.appendChild(topRow);
             pill.appendChild(fleetBar);
-          } else if (fleetCounts) {
-            const pct = fleetCounts.total > 0 ? (fleetCounts.healthy / fleetCounts.total) * 100 : 0;
-            const color = fleetBarColor(pct);
+          } else if (isFleet) {
+            const pct = fleetCounts && fleetCounts.total > 0 ? (fleetCounts.healthy / fleetCounts.total) * 100 : 0;
+            const color = fleetCounts ? fleetBarColor(pct) : 'bg-gray-600';
 
             topRow.innerHTML =
               '<span class="w-2 h-2 rounded-full flex-shrink-0 ' + color + '"></span>' +
@@ -150,7 +152,7 @@
             fleetBar.className = 'relative h-4 rounded-sm overflow-hidden ' + color + ' flex items-center justify-center';
             fleetBar.innerHTML =
               '<span class="text-[10px] font-semibold text-black/80 leading-none">' +
-              fleetCounts.healthy + '/' + fleetCounts.total + '</span>';
+              (fleetCounts ? fleetCounts.healthy + '/' + fleetCounts.total : 'No data') + '</span>';
 
             pill.appendChild(topRow);
             pill.appendChild(fleetBar);

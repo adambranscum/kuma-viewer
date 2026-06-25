@@ -20,15 +20,12 @@ const COLUMN_CONFIG = {
     'Library Applications': { split: false },
     'Databases': { split: false },
 };
-// Monitors tagged with these go to the specified column's extraSections (not via category matching)
 const EXTRA_SECTION_TAGS = {};
 const BRANCHED_ROWS = Object.entries(COLUMN_CONFIG).filter(([_, c]) => c.split).map(([k]) => k);
 const SINGLE_ROWS = Object.entries(COLUMN_CONFIG).filter(([_, c]) => !c.split).map(([k]) => k);
 const ALL_CATEGORIES = Object.keys(COLUMN_CONFIG);
 
-// In-memory cache of monitor metadata (id -> { name, tags: [{name, color}] })
 let monitorCache = {};
-// In-memory cache of heartbeat history for all monitors (id -> [...beat objects])
 let heartbeatCache = {};
 let socketConnected = false;
 
@@ -51,22 +48,17 @@ function connectSocket() {
         });
     });
 
-    // Uptime Kuma pushes the full monitor list (with tags) on this event
     socket.on('monitorList', (list) => {
         monitorCache = list || {};
         console.log(`Monitor list updated: ${Object.keys(monitorCache).length} monitors`);
     });
 
-    // Uptime Kuma sends this ONCE on initial load as a single object keyed
-    // by monitor ID: { "1": [...beats], "2": [...beats] } - NOT as repeated
-    // (monitorID, data) argument pairs. Loop over the keys to populate the
-    // cache correctly for every monitor at once.
+    // TEMPORARY DEBUG: print the raw payload exactly as received, no
+    // assumptions about shape. Remove this once we know the real format.
     socket.on('heartbeatList', (rawPayload) => {
-        console.log('RAW heartbeatList payload sample:', JSON.stringify(rawPayload).slice(0, 300));
+        console.log('FULL RAW STRING:', rawPayload);
     });
 
-    // Real-time heartbeat updates fire per-event as a flat object - this
-    // shape is correct as-is. Append and keep last 50.
     socket.on('heartbeat', (data) => {
         const id = String(data.monitorID);
         if (!heartbeatCache[id]) heartbeatCache[id] = [];
@@ -92,12 +84,10 @@ app.use(express.static('public'));
 
 app.get('/api/status', async (req, res) => {
     try {
-        // Live up/down status still comes from the public heartbeat endpoint
         const hbRes = await fetch(`${KUMA_URL}/api/status-page/heartbeat/${STATUS_PAGE_SLUG}`);
         if (!hbRes.ok) throw new Error(`heartbeat fetch failed: ${hbRes.status}`);
         const hbData = await hbRes.json();
 
-        // Initialize columns — branched categories split by branch, single categories flat
         const columns = {};
         for (const [cat, config] of Object.entries(COLUMN_CONFIG)) {
             if (config.split) {
@@ -115,7 +105,6 @@ app.get('/api/status', async (req, res) => {
             const monitor = monitorCache[monitorId];
             const tags = monitor.tags || [];
 
-            // Check extra section tags first (e.g. "Databases" routes to Services column)
             const extraTag = tags.find(t =>
                 EXTRA_SECTION_TAGS[t.name.trim()] !== undefined
             );
@@ -148,7 +137,6 @@ app.get('/api/status', async (req, res) => {
                 col.color = categoryTag.color;
             }
 
-            // Prefer socket-cached beats (covers all monitors); fall back to status-page HTTP data
             const beats = heartbeatCache[monitorId] || hbData.heartbeatList?.[monitorId] || [];
             const lastBeat = beats[beats.length - 1];
             const status = lastBeat ? lastBeat.status : null;
@@ -161,7 +149,7 @@ app.get('/api/status', async (req, res) => {
                 const branchTag = tags.find(t =>
                     colBranches.some(b => b.toLowerCase() === (t.name || '').trim().toLowerCase())
                 );
-                if (!branchTag) continue; // skip monitors with no branch tag in a branched category
+                if (!branchTag) continue;
                 const branchName = colBranches.find(
                     b => b.toLowerCase() === branchTag.name.trim().toLowerCase()
                 );

@@ -53,6 +53,10 @@
     // of the normal status dot + heartbeat tick row.
     const FLEET_MONITOR_NAMES = ['Vipre Endpoint Fleet'];
 
+    // Monitors whose name matches one of these are rendered with an
+    // "unhealthy / total" count bar instead of the normal tick row.
+    const UNHEALTHY_FLEET_MONITOR_NAMES = ['Vipre Endpoint Security'];
+
     function tickColor(status) {
       if (status === 1) return 'bg-green-500';
       if (status === 0) return 'bg-red-500';
@@ -116,8 +120,25 @@
           topRow.className = 'flex items-center gap-1.5';
 
           const fleetCounts = FLEET_MONITOR_NAMES.includes(m.name) ? parseFleetCounts(m.msg) : null;
+          const unhealthyCounts = UNHEALTHY_FLEET_MONITOR_NAMES.includes(m.name) ? parseFleetCounts(m.msg) : null;
 
-          if (fleetCounts) {
+          if (unhealthyCounts) {
+            const unhealthy = unhealthyCounts.total - unhealthyCounts.healthy;
+            const color = unhealthy === 0 ? 'bg-green-500' : 'bg-red-500';
+
+            topRow.innerHTML =
+              '<span class="w-2 h-2 rounded-full flex-shrink-0 ' + color + '"></span>' +
+              '<span class="text-[11px] leading-none truncate">' + m.name + '</span>';
+
+            const fleetBar = document.createElement('div');
+            fleetBar.className = 'relative h-4 rounded-sm overflow-hidden ' + color + ' flex items-center justify-center';
+            fleetBar.innerHTML =
+              '<span class="text-[10px] font-semibold text-black/80 leading-none">' +
+              unhealthy + ' unhealthy / ' + unhealthyCounts.total + '</span>';
+
+            pill.appendChild(topRow);
+            pill.appendChild(fleetBar);
+          } else if (fleetCounts) {
             const pct = fleetCounts.total > 0 ? (fleetCounts.healthy / fleetCounts.total) * 100 : 0;
             const color = fleetBarColor(pct);
 

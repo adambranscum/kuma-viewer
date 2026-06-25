@@ -57,12 +57,23 @@ function connectSocket() {
         console.log(`Monitor list updated: ${Object.keys(monitorCache).length} monitors`);
     });
 
-    // Uptime Kuma pushes full heartbeat history per monitor after login (all monitors, not just status-page ones)
-    socket.on('heartbeatList', (monitorID, data) => {
-        heartbeatCache[String(monitorID)] = data || [];
+    // Uptime Kuma sends this ONCE on initial load as a single object keyed
+    // by monitor ID: { "1": [...beats], "2": [...beats] } - NOT as repeated
+    // (monitorID, data) argument pairs. Loop over the keys to populate the
+    // cache correctly for every monitor at once.
+    socket.on('heartbeatList', (allBeats) => {
+        if (!allBeats || typeof allBeats !== 'object') {
+            console.error('Unexpected heartbeatList payload shape:', typeof allBeats);
+            return;
+        }
+        for (const [monitorID, beats] of Object.entries(allBeats)) {
+            heartbeatCache[String(monitorID)] = beats || [];
+        }
+        console.log(`Initial heartbeat history loaded for ${Object.keys(allBeats).length} monitors`);
     });
 
-    // Real-time heartbeat updates — append and keep last 50
+    // Real-time heartbeat updates fire per-event as a flat object - this
+    // shape is correct as-is. Append and keep last 50.
     socket.on('heartbeat', (data) => {
         const id = String(data.monitorID);
         if (!heartbeatCache[id]) heartbeatCache[id] = [];

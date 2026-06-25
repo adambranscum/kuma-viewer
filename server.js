@@ -61,15 +61,8 @@ function connectSocket() {
     // by monitor ID: { "1": [...beats], "2": [...beats] } - NOT as repeated
     // (monitorID, data) argument pairs. Loop over the keys to populate the
     // cache correctly for every monitor at once.
-    socket.on('heartbeatList', (allBeats) => {
-        if (!allBeats || typeof allBeats !== 'object') {
-            console.error('Unexpected heartbeatList payload shape:', typeof allBeats);
-            return;
-        }
-        for (const [monitorID, beats] of Object.entries(allBeats)) {
-            heartbeatCache[String(monitorID)] = beats || [];
-        }
-        console.log(`Initial heartbeat history loaded for ${Object.keys(allBeats).length} monitors`);
+    socket.on('heartbeatList', (rawPayload) => {
+        console.log('RAW heartbeatList payload sample:', JSON.stringify(rawPayload).slice(0, 300));
     });
 
     // Real-time heartbeat updates fire per-event as a flat object - this

@@ -175,6 +175,24 @@ app.get('/api/status', async (req, res) => {
     }
 });
 
+app.get('/api/debug/vipre', (req, res) => {
+    const vipreMonitors = Object.entries(monitorCache)
+        .filter(([_, m]) => m.name && m.name.toLowerCase().includes('vipre'))
+        .map(([id, m]) => {
+            const beats = heartbeatCache[id] || [];
+            const lastBeat = beats[beats.length - 1];
+            return {
+                id,
+                name: m.name,
+                tags: m.tags,
+                lastBeatStatus: lastBeat ? lastBeat.status : null,
+                lastBeatMsg: lastBeat ? lastBeat.msg : null,
+                beatCount: beats.length,
+            };
+        });
+    res.json({ vipreMonitors, socketConnected });
+});
+
 app.listen(PORT, () => {
     console.log(`Kuma viewer running at http://localhost:${PORT}`);
 });
